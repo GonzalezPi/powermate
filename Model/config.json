@@ -1,0 +1,29 @@
+{
+  "site": {
+    "name": "Junín",
+    "latitude": -34.5833,
+    "longitude": -60.95,
+    "timezone": "America/Argentina/Buenos_Aires"
+  },
+  "system": {
+    "kwp": 3.0,
+    "tilt": 30.0,
+    "azimuth": 0.0,
+    "ac_kwp": 3.0,
+    "inverter_efficiency": 0.96,
+    "temp_coefficient": -0.0035,
+    "noct": 45.0,
+    "soiling_loss": 0.03,
+    "wiring_loss": 0.02,
+    "mismatch_loss": 0.02,
+    "snow_loss": true,
+    "snow_zero_cm": 2.0
+  },
+  "training": {
+    "years": 2.0,
+    "test_fraction": 0.2,
+    "random_state": 42,
+    "domain_randomization": true,
+    "poly": false
+  }
+}

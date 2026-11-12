@@ -1,6 +1,9 @@
 .env
 /config/database.php
+/config/ai.local.php
 /vendor/
 /.vscode/
+/.idea/
+/Model/reports/
 *.log
 .DS_Store

@@ -1,197 +1,81 @@
-
-
 <?php
 
-// Mostrar todos los errores
+/**
+ * Descarga el pronóstico de Open-Meteo, lo guarda en MySQL y, si está
+ * configurado, lanza una predicción de energía con la IA.
+ */
 
-error_reporting(E_ALL);
+declare(strict_types=1);
 
-// Mostrar errores en pantalla
-
-ini_set("display_errors", "1");
-ini_set("display_startup_errors", "1");
-
-// Activar registro de errores
-
-ini_set("log_errors", "1");
-
-// Archivo donde se guardaran los errores
-
-ini_set("error_log", __DIR__ . "/php_errors.log");
-
-
-// Convertir advertencias y avisos en excepciones
-
-function manejarErrorPHP($nivel, $mensaje, $archivo, $linea) {
-
-    if (!(error_reporting() & $nivel)) {
-        return false;
-    }
-
-    throw new ErrorException(
-        $mensaje,
-        0,
-        $nivel,
-        $archivo,
-        $linea
-    );
-
-}
-
-set_error_handler("manejarErrorPHP");
-
-
+['conexion' => $conexion, 'config' => $config] =
+    require __DIR__ . "/config/bootstrap.php";
 
 try {
+    $pronostico = obtenerPronosticoMeteorologico($config);
+    $repositorio = new RepositorioClima($conexion, $config);
+    $guardado = $repositorio->guardarPronostico($pronostico);
 
-    // Incluir conexion y servicio meteorologico
-
-    require_once __DIR__ . "/config/database.php";
-    require_once __DIR__ . "/services/OpenMeteo.php";
-
-
-    // Obtener datos de Open-Meteo
-
-    $datos = obtenerDatosMeteorologicos();
-
-    $horas = $datos["time"];
-    $temperaturas = $datos["temperature_2m"];
-    $lluvias = $datos["rain"];
-    $probabilidades = $datos["precipitation_probability"];
-
-
-    // Verificar cantidad de datos
-
-    $cantidad = count($horas);
-
-    if (
-        count($temperaturas) != $cantidad ||
-        count($lluvias) != $cantidad ||
-        count($probabilidades) != $cantidad
-    ) {
-
-        throw new Exception(
-            "Los datos recibidos no tienen la misma cantidad de registros."
-        );
-
-    }
-
-
-    // Preparar consulta SQL
-
-    $sql = "INSERT INTO Predicciones_Meteorologicas
-            (Fecha_hora, Temperatura, Precipitaciones, Consumo)
-            VALUES (:fecha, :temperatura, :precipitaciones, :consumo)";
-
-    $consulta = $conexion->prepare($sql);
-
-
-    // Iniciar transaccion
-
-    $conexion->beginTransaction();
-
-    $insertados = 0;
-
-
-    // Recorrer los datos horarios
-
-    for ($i = 0; $i < $cantidad; $i++) {
-
-        // Saltar registros sin temperatura o lluvia
-
-        if (
-            $temperaturas[$i] === null ||
-            $lluvias[$i] === null
-        ) {
-            continue;
+    $prediccion = null;
+    $errorPrediccion = null;
+    if (!empty($config["pronostico"]["predecir_tras_actualizar"])) {
+        try {
+            $prediccion = Prediccion::generar($conexion, $config);
+        } catch (Throwable $e) {
+            $errorPrediccion = $e->getMessage();
+            error_log(
+                "[PowerMate] No se pudo predecir tras actualizar: "
+                . $e->getMessage()
+            );
         }
-
-
-        // Insertar datos en MySQL
-
-        $consulta->execute(array(
-
-            ":fecha" => $horas[$i],
-
-            ":temperatura" => $temperaturas[$i],
-
-            ":precipitaciones" => $lluvias[$i],
-
-            // El consumo se calculara mas adelante
-
-            ":consumo" => 0
-
-        ));
-
-        $insertados++;
-
     }
 
-
-    // Confirmar la transaccion
-
-    $conexion->commit();
-
-
-    // Mostrar resultado
-
-    echo "<h2>Predicciones guardadas correctamente</h2>";
-
-    echo "<p>Horas recibidas desde la API: "
-         . $cantidad . "</p>";
-
-    echo "<p>Registros insertados en MySQL: "
-         . $insertados . "</p>";
-
-
-} catch (Exception $e) {
-
-
-    // Deshacer cambios si existe una transaccion activa
-
-    if (
-        isset($conexion) &&
-        $conexion->inTransaction()
-    ) {
-
-        $conexion->rollBack();
-
-    }
-
-
-    // Registrar el error en el archivo de log
-
-    error_log(
-        $e->getMessage() .
-        " | Archivo: " . $e->getFile() .
-        " | Linea: " . $e->getLine()
+    $mensaje = sprintf(
+        "Clima actualizado: %d horas procesadas (%d nuevas, %d actualizadas).",
+        $guardado["procesados"],
+        $guardado["insertados"],
+        $guardado["actualizados"]
     );
 
+    if ($prediccion !== null) {
+        $resumen = $prediccion["resultado"]["summary"] ?? [];
+        $mensaje .= sprintf(
+            " Predicción generada: %.2f kWh en %d días.",
+            (float) ($resumen["total_kwh"] ?? 0.0),
+            (int) ($resumen["days"] ?? 0)
+        );
+    }
+    if ($errorPrediccion !== null) {
+        $mensaje .= " No se pudo predecir: " . $errorPrediccion;
+    }
 
-    // Mostrar el error en pantalla
+    if (quiereJson()) {
+        responderJson([
+            "ok" => true,
+            "guardado" => $guardado,
+            "prediccion" => $prediccion["resultado"] ?? null,
+            "error_prediccion" => $errorPrediccion,
+            "mensaje" => $mensaje,
+        ]);
+    }
 
-    echo "<h2>Error al guardar las predicciones</h2>";
+    redirigirConMensaje(
+        $mensaje,
+        $errorPrediccion === null ? "ok" : "aviso"
+    );
+} catch (Throwable $e) {
+    error_log(
+        "[PowerMate] Error al guardar predicciones: " . $e->getMessage()
+    );
 
-    echo "<p><strong>Mensaje:</strong> "
-         . htmlspecialchars(
-             $e->getMessage(),
-             ENT_QUOTES,
-             "UTF-8"
-         )
-         . "</p>";
+    if (quiereJson()) {
+        responderJson(
+            ["ok" => false, "error" => $e->getMessage()],
+            500
+        );
+    }
 
-    echo "<p><strong>Archivo:</strong> "
-         . htmlspecialchars(
-             $e->getFile(),
-             ENT_QUOTES,
-             "UTF-8"
-         )
-         . "</p>";
-
-    echo "<p><strong>Linea:</strong> "
-         . $e->getLine()
-         . "</p>";
-
+    redirigirConMensaje(
+        "Error al actualizar el clima: " . $e->getMessage(),
+        "error"
+    );
 }
-
-?>
