@@ -230,27 +230,6 @@ class RepositorioEnergia
         return $consulta->fetchAll();
     }
 
-    /**
-     * @return list<array<string, mixed>>
-     */
-    public function obtenerHorarias(
-        DateTimeImmutable $desde,
-        DateTimeImmutable $hasta
-    ): array {
-        $consulta = $this->conexion->prepare(
-            "SELECT Fecha_hora, Potencia_w, Energia_kwh, Gti_wm2,
-                    Temperatura_c, Nubosidad_pct, Viento_kmh
-             FROM Predicciones_Energia_Horaria
-             WHERE Fecha_hora >= :desde AND Fecha_hora <= :hasta
-             ORDER BY Fecha_hora ASC"
-        );
-        $consulta->execute([
-            ":desde" => $desde->format("Y-m-d H:i:s"),
-            ":hasta" => $hasta->format("Y-m-d H:i:s"),
-        ]);
-        return $consulta->fetchAll();
-    }
-
     public function resumenProximosDias(DateTimeImmutable $desde): array
     {
         $consulta = $this->conexion->prepare(

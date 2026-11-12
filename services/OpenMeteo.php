@@ -139,12 +139,3 @@ function obtenerPronosticoMeteorologico(array $config = []): array
         "horas" => $horas,
     ];
 }
-
-/**
- * Compatibilidad con el código anterior: devuelve solo el bloque horario.
- */
-function obtenerDatosMeteorologicos(array $config = []): array
-{
-    $pronostico = obtenerPronosticoMeteorologico($config);
-    return $pronostico["horas"];
-}

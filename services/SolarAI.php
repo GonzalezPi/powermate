@@ -73,19 +73,6 @@ class SolarAI
         ]);
     }
 
-    /**
-     * Consulta el estado del modelo activo.
-     *
-     * @return array<string, mixed>
-     */
-    public function info(): array
-    {
-        return $this->ejecutar([
-            "action" => "info",
-            "config" => $this->configPython(),
-        ]);
-    }
-
     // ------------------------------------------------------------------
     // Ejecución del proceso
     // ------------------------------------------------------------------
