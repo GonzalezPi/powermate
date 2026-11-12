@@ -4,14 +4,14 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>PowerMate - Predicciones meteorológicas</title>
+    <title>PowerMate - Predicciones meteorologicas</title>
 </head>
 
 <body>
 
     <h1>PowerMate</h1>
 
-    <h2>Predicciones meteorológicas</h2>
+    <h2>Predicciones meteorologicas</h2>
 
     <p>Obtener y guardar datos de Open-Meteo.</p>
 

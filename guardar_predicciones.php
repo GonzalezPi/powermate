@@ -1,14 +1,56 @@
 
+
 <?php
 
-// 1. Incluir conexión a MySQL y servicio Open-Meteo
+// Mostrar todos los errores
 
-require_once __DIR__ . "/config/database.php";
-require_once __DIR__ . "/services/OpenMeteo.php";
+error_reporting(E_ALL);
+
+// Mostrar errores en pantalla
+
+ini_set("display_errors", "1");
+ini_set("display_startup_errors", "1");
+
+// Activar registro de errores
+
+ini_set("log_errors", "1");
+
+// Archivo donde se guardaran los errores
+
+ini_set("error_log", __DIR__ . "/php_errors.log");
+
+
+// Convertir advertencias y avisos en excepciones
+
+function manejarErrorPHP($nivel, $mensaje, $archivo, $linea) {
+
+    if (!(error_reporting() & $nivel)) {
+        return false;
+    }
+
+    throw new ErrorException(
+        $mensaje,
+        0,
+        $nivel,
+        $archivo,
+        $linea
+    );
+
+}
+
+set_error_handler("manejarErrorPHP");
+
+
 
 try {
 
-    // 2. Obtener datos de Open-Meteo
+    // Incluir conexion y servicio meteorologico
+
+    require_once __DIR__ . "/config/database.php";
+    require_once __DIR__ . "/services/OpenMeteo.php";
+
+
+    // Obtener datos de Open-Meteo
 
     $datos = obtenerDatosMeteorologicos();
 
@@ -17,19 +59,25 @@ try {
     $lluvias = $datos["rain"];
     $probabilidades = $datos["precipitation_probability"];
 
-    // 3. Verificar cantidad de datos
+
+    // Verificar cantidad de datos
 
     $cantidad = count($horas);
 
     if (
-        count($temperaturas) !== $cantidad ||
-        count($lluvias) !== $cantidad ||
-        count($probabilidades) !== $cantidad
+        count($temperaturas) != $cantidad ||
+        count($lluvias) != $cantidad ||
+        count($probabilidades) != $cantidad
     ) {
-        throw new Exception("Los datos recibidos no tienen la misma cantidad de registros.");
+
+        throw new Exception(
+            "Los datos recibidos no tienen la misma cantidad de registros."
+        );
+
     }
 
-    // 4. Preparar consulta SQL
+
+    // Preparar consulta SQL
 
     $sql = "INSERT INTO Predicciones_Meteorologicas
             (Fecha_hora, Temperatura, Precipitaciones, Consumo)
@@ -37,15 +85,19 @@ try {
 
     $consulta = $conexion->prepare($sql);
 
-    // 5. Iniciar transacción
+
+    // Iniciar transaccion
 
     $conexion->beginTransaction();
 
     $insertados = 0;
 
-    // 6. Recorrer las 72 horas e insertar los datos
+
+    // Recorrer los datos horarios
 
     for ($i = 0; $i < $cantidad; $i++) {
+
+        // Saltar registros sin temperatura o lluvia
 
         if (
             $temperaturas[$i] === null ||
@@ -54,7 +106,10 @@ try {
             continue;
         }
 
-        $consulta->execute([
+
+        // Insertar datos en MySQL
+
+        $consulta->execute(array(
 
             ":fecha" => $horas[$i],
 
@@ -62,39 +117,80 @@ try {
 
             ":precipitaciones" => $lluvias[$i],
 
-            // El consumo lo calcularemos más adelante
+            // El consumo se calculara mas adelante
 
             ":consumo" => 0
 
-        ]);
+        ));
 
         $insertados++;
 
     }
 
-    // 7. Confirmar los registros
+
+    // Confirmar la transaccion
 
     $conexion->commit();
 
-    // 8. Mostrar resultado
 
-    echo "<h2>¡Predicciones guardadas correctamente!</h2>";
+    // Mostrar resultado
 
-    echo "<p>Horas recibidas desde la API: " . $cantidad . "</p>";
+    echo "<h2>Predicciones guardadas correctamente</h2>";
 
-    echo "<p>Registros insertados en MySQL: " . $insertados . "</p>";
+    echo "<p>Horas recibidas desde la API: "
+         . $cantidad . "</p>";
 
-} catch (Throwable $e) {
+    echo "<p>Registros insertados en MySQL: "
+         . $insertados . "</p>";
 
-    // Deshacer inserciones si ocurre algún error
 
-    if (isset($conexion) && $conexion->inTransaction()) {
+} catch (Exception $e) {
+
+
+    // Deshacer cambios si existe una transaccion activa
+
+    if (
+        isset($conexion) &&
+        $conexion->inTransaction()
+    ) {
+
         $conexion->rollBack();
+
     }
+
+
+    // Registrar el error en el archivo de log
+
+    error_log(
+        $e->getMessage() .
+        " | Archivo: " . $e->getFile() .
+        " | Linea: " . $e->getLine()
+    );
+
+
+    // Mostrar el error en pantalla
 
     echo "<h2>Error al guardar las predicciones</h2>";
 
-    echo "<p>" . htmlspecialchars($e->getMessage()) . "</p>";
+    echo "<p><strong>Mensaje:</strong> "
+         . htmlspecialchars(
+             $e->getMessage(),
+             ENT_QUOTES,
+             "UTF-8"
+         )
+         . "</p>";
+
+    echo "<p><strong>Archivo:</strong> "
+         . htmlspecialchars(
+             $e->getFile(),
+             ENT_QUOTES,
+             "UTF-8"
+         )
+         . "</p>";
+
+    echo "<p><strong>Linea:</strong> "
+         . $e->getLine()
+         . "</p>";
 
 }
 
